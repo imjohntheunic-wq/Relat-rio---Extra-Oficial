@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diário de Bordo Pessoal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col font-sans">
+
+  <!-- Topo / Barra de Ferramentas -->
+  <header class="bg-slate-800 text-white p-4 shadow-md sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+      <h1 class="text-xl font-bold tracking-wide">Diário de Bordo Pessoal</h1>
+      
+      <!-- Campo de Busca -->
+      <div class="relative w-full sm:w-96">
+        <input 
+          type="text" 
+          id="searchInput" 
+          oninput="filtrarRelatorios()" 
+          placeholder="Pesquisar por data, mês, ano ou palavra..." 
+          class="w-full pl-4 pr-10 py-2 rounded-lg bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        >
+        <span class="absolute right-3 top-2.5 text-slate-400">🔍</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Área Principal Dividida em 2 Janelas -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+    
+    <!-- JANELA 1: RELATÓRIO ONLINE -->
+    <section class="bg-white rounded-xl shadow border border-gray-200 flex flex-col h-[calc(100vh-140px)]">
+      <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-blue-50/50 rounded-t-xl">
+        <div>
+          <h2 class="font-bold text-blue-900 text-lg">Relatório Online</h2>
+          <p class="text-xs text-blue-600">Lançamentos em tempo real</p>
+        </div>
+        <button 
+          onclick="solicitarSenhaEEnviar('online')" 
+          class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-1 shadow transition"
+        >
+          <span>✏️</span> ESCREVER
+        </button>
+      </div>
+
+      <!-- Feed Online -->
+      <div id="feedOnline" class="p-4 overflow-y-auto flex-1 space-y-3">
+        <p class="text-gray-400 text-sm text-center py-8">Carregando dados do Google Sheets...</p>
+      </div>
+    </section>
+
+    <!-- JANELA 2: RELATÓRIO FÍSICO -->
+    <section class="bg-white rounded-xl shadow border border-gray-200 flex flex-col h-[calc(100vh-140px)]">
+      <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-emerald-50/50 rounded-t-xl">
+        <div>
+          <h2 class="font-bold text-emerald-900 text-lg">Relatório Físico</h2>
+          <p class="text-xs text-emerald-600">Digitação retroativa (caderno)</p>
+        </div>
+        <button 
+          onclick="solicitarSenhaEEnviar('fisico')" 
+          class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-1 shadow transition"
+        >
+          <span>✏️</span> ESCREVER
+        </button>
+      </div>
+
+      <!-- Feed Físico -->
+      <div id="feedFisico" class="p-4 overflow-y-auto flex-1 space-y-3">
+        <p class="text-gray-400 text-sm text-center py-8">Carregando dados do Google Sheets...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Script da Aplicação -->
+  <script>
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxub2PtSLeSwXjvfjPQrcl8lbagN050jOq127lDrQ1gzNZWFhrF08MOl3SDkbwzxsw6cw/exec"; 
+    
+    // Senha codificada em Base64 ("2111")
+    const SENHA_CODIFICADA = "MjExMQ==";
+
+    let todosOsRegistros = [];
+
+    // Carrega dados da planilha ao abrir a página
+    window.onload = carregarDadosDoSheets;
+
+    async function carregarDadosDoSheets() {
+      try {
+        const resposta = await fetch(APPS_SCRIPT_URL);
+        const dados = await resposta.json();
+        
+        if (dados.result === 'success' && dados.data) {
+          todosOsRegistros = dados.data;
+          renderizarRegistros(todosOsRegistros);
+        }
+      } catch (erro) {
+        console.error("Erro ao buscar dados:", erro);
+        const mensagemErro = `<p class="text-red-500 text-sm text-center p-4">Erro ao conectar com o Google Sheets.</p>`;
+        document.getElementById('feedOnline').innerHTML = mensagemErro;
+        document.getElementById('feedFisico').innerHTML = mensagemErro;
+      }
+    }
+
+    async function solicitarSenhaEEnviar(tipo) {
+      const senhaInput = prompt("Digite sua matrícula para liberar a escrita:");
+      
+      if (senhaInput === null) return;
+
+      const inputCodificado = btoa(senhaInput.trim());
+
+      if (inputCodificado === SENHA_CODIFICADA) {
+        novoRegistro(tipo);
+      } else {
+        alert("Matrícula incorreta! Acesso negado.");
+      }
+    }
+
+    async function novoRegistro(tipo) {
+      const texto = prompt(`Digite o relato para o [Relatório ${tipo.toUpperCase()}]:`);
+      if (!texto || texto.trim() === "") return;
+
+      let dataRef = new Date();
+      let horarioRef = dataRef.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+      if (tipo === 'fisico') {
+        const dataManual = prompt("Digite a data do ocorrido no caderno (DD/MM/AAAA):", dataRef.toLocaleDateString('pt-BR'));
+        const horaManual = prompt("Digite o horário (HH:mm):", horarioRef);
+        
+        if (dataManual) {
+          const partes = dataManual.split('/');
+          if (partes.length === 3) {
+            dataRef = new Date(partes[2], partes[1] - 1, partes[0]);
+          }
+        }
+        if (horaManual) horarioRef = horaManual;
+      }
+
+      const diasDaSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+      const diaSemana = diasDaSemana[dataRef.getDay()];
+      const dataFormatada = `${String(dataRef.getDate()).padStart(2, '0')}/${String(dataRef.getMonth() + 1).padStart(2, '0')}/${dataRef.getFullYear()}`;
+
+      const tagTipo = tipo === 'online' ? 'Relatório Online' : 'Relatório Físico';
+      const cabecalhoFormatado = `[${tagTipo} dia ${dataFormatada}, ${diaSemana} - ${horarioRef}]`;
+
+      const novoObjeto = {
+        data: cabecalhoFormatado,
+        tipo: tipo,
+        horario: horarioRef,
+        relato: texto
+      };
+
+      // Adiciona na tela imediatamente
+      todosOsRegistros.unshift({
+        dataCompleta: novoObjeto.data,
+        tipo: novoObjeto.tipo,
+        horario: novoObjeto.horario,
+        relato: novoObjeto.relato
+      });
+      renderizarRegistros(todosOsRegistros);
+
+      // Envia para o Google Sheets via POST
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(novoObjeto)
+        });
+      } catch (e) {
+        console.error("Erro ao salvar no Sheets:", e);
+      }
+    }
+
+    function renderizarRegistros(lista) {
+      const feedOnline = document.getElementById('feedOnline');
+      const feedFisico = document.getElementById('feedFisico');
+
+      const online = lista.filter(item => item.tipo === 'online');
+      const fisico = lista.filter(item => item.tipo === 'fisico');
+
+      feedOnline.innerHTML = online.length ? online.map(item => criarCard(item, 'blue')).join('') : '<p class="text-gray-400 text-sm text-center py-4">Nenhum relato online registrado.</p>';
+      feedFisico.innerHTML = fisico.length ? fisico.map(item => criarCard(item, 'emerald')).join('') : '<p class="text-gray-400 text-sm text-center py-4">Nenhum relato físico registrado.</p>';
+    }
+
+    function criarCard(item, cor) {
+      const bordaCor = cor === 'blue' ? 'border-blue-500 text-blue-700' : 'border-emerald-500 text-emerald-700';
+      return `
+        <div class="bg-gray-50 border-l-4 ${bordaCor} p-3 rounded shadow-sm hover:shadow transition">
+          <span class="text-xs font-semibold block mb-1">${item.dataCompleta}</span>
+          <p class="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">${item.relato}</p>
+        </div>
+      `;
+    }
+
+    function filtrarRelatorios() {
+      const termo = document.getElementById('searchInput').value.toLowerCase();
+      const filtrados = todosOsRegistros.filter(item => 
+        item.dataCompleta.toLowerCase().includes(termo) || 
+        item.relato.toLowerCase().includes(termo)
+      );
+      renderizarRegistros(filtrados);
+    }
+  </script>
+</body>
+</html>
